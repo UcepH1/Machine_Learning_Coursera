@@ -1,0 +1,148 @@
+---
+title: "Machine Learning Assignment"
+author: "UcepH1"
+date: "24/08/2019"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(caret);library(gbm);library(rattle);library(randomForest);
+```
+
+## Overview
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+## Getting and Preparing Data
+
+Let's start by getting data. Two files are available :
+
+- *pml-training.csv* : file to build and test the model
+- *pml-testing.csv* : file to test the model (course quiz)
+```{r}
+## check if files were already downloaded
+trainfile = "pml-training.csv"
+if (!file.exists(trainfile)){
+        # Download
+        url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        download.file(url, trainfile)
+}
+testfile = "pml-testing.csv"
+if (!file.exists(testfile)){
+        # Download
+        url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(url, testfile)
+}
+```
+
+Let's read data files. 
+```{r}
+## Reading files training and testing sets 
+training = read.csv(trainfile, na.strings = c("NA", "#DIV/0!")) # used to build model
+testing = read.csv(testfile, na.strings = c("NA", "#DIV/0!")) # ultimate test set
+```
+
+Training file contains `r nrow(training)` rows and `r ncol(training)` columns while testing file contains `r nrow(testing)` rows and `r ncol(testing)` columns.
+
+*NA* values are represented by following strings : *NA* and *#DIV/0!*.
+
+Let's clean the data from *NA* values.
+```{r}
+## Removing columns with NA values
+train_data = training[, colSums(is.na(training)) == 0] #
+test_data =  testing[, colSums(is.na(testing)) == 0] # 
+```
+
+In addition, the first few columns (up to the 7th) do not seem to provide useful information. Hence, we will remove them.
+
+```{r}
+## Removing columns 1 to 7
+train_data = train_data[, -c(1:7)] #
+test_data =  test_data[, -c(1:7)] # 
+```
+
+We are now down to `r ncol(train_data)` variables.
+
+## Modelling and prediction
+
+We will split our training data into two sets: 60% to build model, 40% to evaluate out of sample error.
+```{r }
+## Split training set into two sets : 
+inTrain <- createDataPartition(y=train_data$classe,
+                              p=0.6, list=FALSE)
+
+train_set = train_data[inTrain,]
+test_set = train_data[-inTrain,]
+```
+
+Next, we will look at two models :
+
+1. Classification Trees
+2. Random Forest
+
+### Classification trees
+
+Here we use the *rpart* method combined with a *cross validation*.
+```{r}
+## Cross validation
+fitControl = trainControl(method = 'cv', number = 10, verboseIter = FALSE)
+set.seed(2019)
+## Build model 1
+modelFit = train(classe ~ .,data=train_set, method="rpart", trControl=fitControl)
+```
+
+Testing final model on test set (obtained by splitting training file) :
+
+```{r}
+## Predict with Test_set based on model 1
+CT_result = predict(modelFit, newdata=test_set)
+M_CT = confusionMatrix(data=CT_result, reference=test_set[,53])
+M_CT
+```
+
+```{r}
+## Plot
+fancyRpartPlot(modelFit$finalModel)
+```
+
+### Random Forest
+
+Here we use *random forest* combined with *cross validation*.
+```{r}
+## Cross validation
+fitControl = trainControl(method = 'cv', number = 2, verboseIter = FALSE)
+set.seed(2019)
+## Build model 2
+modelFit2 = train(classe ~ .,data=train_set, method="rf", trControl=fitControl)
+```
+
+Testing final model on test set (obtained by splitting training file) :
+
+```{r}
+## Predict with Test_set based on model 2
+RF_result = predict(modelFit2, newdata=test_set)
+M_RF = confusionMatrix(data=RF_result, reference=test_set[,53])
+M_RF
+```
+
+## Conclusion
+
+From previous results, we found that ***out-of-sample error*** on test set is : 
+
+- `r round(1 - M_CT$overall[[1]], 4)` for *Classification Tree*
+- `r round(1 - M_RF$overall[[1]], 4)` for *Random Forest*
+
+Therefore, the model we will apply for the course quiz is the *Random Forest* as it is the most accurate.
+
+```{r}
+## Predict with Test_set based on model 2
+Course_Quiz_result = predict(modelFit2, newdata=test_data)
+Course_Quiz_result
+```
